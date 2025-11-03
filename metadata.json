@@ -1,0 +1,7 @@
+{
+  "name": "NutriZen – Coach Vocal",
+  "description": "Un coach nutritionnel vocal qui vous donne des conseils instantanés et personnalisés sur vos repas. Décrivez votre repas et recevez une analyse et des suggestions pour atteindre vos objectifs de santé.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
