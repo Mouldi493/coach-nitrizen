@@ -1,18 +1,33 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LiveServerMessage } from '@google/genai';
 import { geminiService } from './services/geminiService';
 import { Message, MealAnalysis } from './types';
 import MessageBubble from './components/MessageBubble';
-import { MicIcon, StopCircleIcon } from './components/Icons';
+import { MicIcon, StopCircleIcon, TrashIcon } from './components/Icons';
 
 type SessionState = 'idle' | 'listening' | 'processing' | 'error';
+const HISTORY_KEY = 'nutrizen-conversation-history';
+
+const getInitialMessages = (): Message[] => {
+    try {
+        const savedHistory = localStorage.getItem(HISTORY_KEY);
+        if (savedHistory) {
+            const parsedMessages = JSON.parse(savedHistory);
+            if (Array.isArray(parsedMessages) && parsedMessages.length > 0) {
+                return parsedMessages;
+            }
+        }
+    } catch (error) {
+        console.error("Failed to load conversation history:", error);
+        localStorage.removeItem(HISTORY_KEY);
+    }
+    return [{ id: 'welcome', sender: 'system', text: 'Appuyez sur le micro pour commencer à décrire votre repas.' }];
+};
+
 
 const App: React.FC = () => {
   const [sessionState, setSessionState] = useState<SessionState>('idle');
-  const [messages, setMessages] = useState<Message[]>([
-      { id: 'welcome', sender: 'system', text: 'Appuyez sur le micro pour commencer à décrire votre repas.' }
-  ]);
+  const [messages, setMessages] = useState<Message[]>(getInitialMessages);
   
   const userTranscriptionRef = useRef('');
   const coachTranscriptionRef = useRef('');
@@ -24,6 +39,20 @@ const App: React.FC = () => {
   };
 
   useEffect(scrollToBottom, [messages]);
+
+  useEffect(() => {
+    try {
+        const messagesToSave = messages.filter(msg => msg.sender !== 'system');
+        if (messagesToSave.length > 0) {
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(messagesToSave));
+        } else {
+            localStorage.removeItem(HISTORY_KEY);
+        }
+    } catch (error) {
+        console.error("Failed to save conversation history:", error);
+    }
+  }, [messages]);
+
 
   const handleMessage = useCallback((message: LiveServerMessage) => {
     let shouldUpdateState = false;
@@ -142,24 +171,47 @@ const App: React.FC = () => {
     await geminiService.stopSession();
   };
 
+  const clearHistory = () => {
+    geminiService.stopSession();
+    localStorage.removeItem(HISTORY_KEY);
+    setSessionState('idle');
+    setMessages([{ id: 'welcome', sender: 'system', text: 'Appuyez sur le micro pour commencer à décrire votre repas.' }]);
+  };
+
   const MicButton = () => (
-    <button
-      onClick={sessionState === 'listening' ? stopSession : startSession}
-      disabled={sessionState === 'processing'}
-      className={`fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center justify-center w-20 h-20 rounded-full text-white shadow-2xl transition-all duration-300 transform
-        ${sessionState === 'listening' ? 'bg-red-500 animate-pulse' : 'bg-green-500 hover:bg-green-600'}
-        ${sessionState === 'processing' ? 'bg-gray-400 cursor-not-allowed' : ''}
-      `}
-    >
-      {sessionState === 'listening' ? <StopCircleIcon className="w-10 h-10" /> : <MicIcon className="w-10 h-10" />}
-    </button>
+    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-28 h-28 flex items-center justify-center">
+        {sessionState === 'listening' && (
+            <div className="absolute w-full h-full animate-wave" style={{ border: '3px solid #60a5fa' }}></div>
+        )}
+        <button
+            onClick={sessionState === 'listening' ? stopSession : startSession}
+            disabled={sessionState === 'processing'}
+            className={`relative flex items-center justify-center w-20 h-20 rounded-full text-white shadow-2xl transition-colors duration-300
+                ${sessionState === 'listening' ? 'bg-red-500' : 'bg-green-500 hover:bg-green-600'}
+                ${sessionState === 'processing' ? 'bg-gray-400 cursor-not-allowed' : ''}
+            `}
+            aria-label={sessionState === 'listening' ? "Arrêter l'enregistrement" : "Commencer l'enregistrement"}
+        >
+            {sessionState === 'listening' ? <StopCircleIcon className="w-10 h-10" /> : <MicIcon className="w-10 h-10" />}
+        </button>
+    </div>
   );
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans">
-      <header className="bg-white shadow-sm p-4 text-center">
-        <h1 className="text-2xl font-bold text-green-600">NutriZen – Coach Vocal</h1>
-        <p className="text-sm text-gray-500">Votre partenaire nutritionnel au quotidien</p>
+      <header className="bg-white shadow-sm p-4 flex items-center justify-between">
+        <div className="text-left">
+            <h1 className="text-2xl font-bold text-green-600">NutriZen – Coach Vocal</h1>
+            <p className="text-sm text-gray-500">Votre partenaire nutritionnel au quotidien</p>
+        </div>
+        <button
+            onClick={clearHistory}
+            className="p-2 text-gray-500 hover:text-red-600 transition-colors rounded-full hover:bg-gray-100"
+            aria-label="Effacer l'historique"
+            title="Effacer l'historique"
+        >
+            <TrashIcon className="w-6 h-6" />
+        </button>
       </header>
       <main className="flex-1 overflow-y-auto p-4 pb-32">
         <div className="max-w-3xl mx-auto space-y-6">
